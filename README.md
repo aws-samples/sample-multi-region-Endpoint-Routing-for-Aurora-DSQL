@@ -40,26 +40,9 @@ A Python library implementing client-based routing for Amazon Aurora DSQL endpoi
 
 ## Authentication
 
-This library uses the AWS SDK's default credential provider chain for authentication. Before running the code, ensure you have configured your AWS credentials using one of the following methods:
+This library uses the AWS SDK's default credential provider chain for authentication. Before running the code, ensure you have configured your AWS credentials using the AWS Documentation: https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html
 
-1. Configure the AWS CLI:
-   ```bash
-   aws configure
-   ```
-
-2. Set environment variables:
-   ```bash
-   export AWS_ACCESS_KEY_ID=your_access_key
-   export AWS_SECRET_ACCESS_KEY=your_secret_key
-   export AWS_REGION=your_region
-   ```
-
-3. Use a specific profile:
-   ```bash
-   export AWS_PROFILE=your_profile_name
-   ```
-
-Make sure your credentials have the necessary permissions to access DSQL services.
+Make sure your credentials have the necessary permissions to access DSQL services. You can follow the documentaion on how to set it up: https://docs.aws.amazon.com/aurora-dsql/latest/userguide/security-iam.html
 
 ## Usage
 
