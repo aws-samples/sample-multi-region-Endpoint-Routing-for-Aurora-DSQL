@@ -23,7 +23,7 @@ A Python library implementing client-based routing for Amazon Aurora DSQL endpoi
 
 1. Clone this repository
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/aws-samples/sample-multi-region-Endpoint-Routing-for-Aurora-DSQL.git;
    cd dsql-routing
    ```
 
