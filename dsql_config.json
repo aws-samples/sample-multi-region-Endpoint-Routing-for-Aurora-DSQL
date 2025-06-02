@@ -1,0 +1,26 @@
+{
+  "endpoints": [
+    {
+      "cluster_id": "iaabtumcvmzcqntetotnvc2s6q",
+      "region": "us-east-1",
+      "hostname": "iaabtumcvmzcqntetotnvc2s6q.dsql.us-east-1.on.aws",
+      "port": 5432,
+      "priority": 1
+    },
+    {
+      "cluster_id": "syabtumcvm3imisxx354rldj5i",
+      "region": "us-east-2",
+      "hostname": "syabtumcvm3imisxx354rldj5i.dsql.us-east-2.on.aws",
+      "port": 5432,
+      "priority": 2
+    }
+  ],
+  "connection_settings": {
+    "connect_timeout": 5,
+    "application_name": "dsql-latency-router",
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3
+  }
+}
