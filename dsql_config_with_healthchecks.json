@@ -6,7 +6,7 @@
       "hostname": "<Your-Cluster-endpoint>",
       "port": 5432,
       "priority": 1,
-      "health_check_id": ""
+      "health_check_id": "<health_check_id>"
     },
     {
       "cluster_id": "<Your-culster-id>",
@@ -14,7 +14,7 @@
       "hostname": "<Your-Cluster-endpoint>",
       "port": 5432,
       "priority": 2,
-      "health_check_id": "37d3a545-2917-4e8f-9e44-f7d5e9b966a7"
+      "health_check_id": "<health_check_id>"
     }
   ],
   "connection_settings": {
