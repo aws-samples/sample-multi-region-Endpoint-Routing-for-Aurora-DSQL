@@ -74,16 +74,16 @@ You can specify your own DSQL endpoints:
 ```python
 endpoints = [
     {
-        "cluster_id": "your-cluster-id-1",
+        "cluster_id": "<your-cluster-id-1>",
         "region": "us-east-1",
-        "hostname": "your-hostname-1.dsql.us-east-1.on.aws",
+        "hostname": "<your-cluster-id-1>.dsql.us-east-1.on.aws",
         "port": 5432,
         "priority": 1  # Lower priority number means higher preference
     },
     {
-        "cluster_id": "your-cluster-id-2",
+        "cluster_id": "<your-cluster-id-2>",
         "region": "us-west-2",
-        "hostname": "your-hostname-2.dsql.us-west-2.on.aws",
+        "hostname": "<your-cluster-id-2>.dsql.us-west-2.on.aws",
         "port": 5432,
         "priority": 2
     }
@@ -109,20 +109,20 @@ The repository includes a sample configuration file `dsql_config_with_healthchec
 {
   "endpoints": [
     {
-      "cluster_id": "iaabtumcvmzcqntetotnvc2s6q",
+      "cluster_id": "<your-cluster-id-1>",
       "region": "us-east-1",
-      "hostname": "iaabtumcvmzcqntetotnvc2s6q.dsql.us-east-1.on.aws",
+      "hostname": "<your-cluster-id-1>.dsql.us-east-1.on.aws",
       "port": 5432,
       "priority": 1,
-      "health_check_id": "57a713b9-a58f-4ae5-baaa-70cf62ca78eb"
+      "health_check_id": "<health-check-id-1>"
     },
     {
-      "cluster_id": "syabtumcvm3imisxx354rldj5i",
+      "cluster_id": "<your-cluster-id-2>",
       "region": "us-east-2",
-      "hostname": "syabtumcvm3imisxx354rldj5i.dsql.us-east-2.on.aws",
+      "hostname": "<your-cluster-id-2>.dsql.us-east-2.on.aws",
       "port": 5432,
       "priority": 2,
-      "health_check_id": "37d3a545-2917-4e8f-9e44-f7d5e9b966a7"
+      "health_check_id": "<health-check-id-2>"
     }
   ],
   "connection_settings": {
@@ -156,20 +156,20 @@ The library provides an enhanced approach that uses AWS Route 53 health checks f
    {
      "endpoints": [
        {
-         "cluster_id": "your-cluster-id-1",
+         "cluster_id": "<your-cluster-id-1>",
          "region": "us-east-1",
-         "hostname": "your-hostname-1.dsql.us-east-1.on.aws",
+         "hostname": "<your-cluster-id-1>.dsql.us-east-1.on.aws",
          "port": 5432,
          "priority": 1,
-         "health_check_id": "57a713b9-a58f-4ae5-baaa-70cf62ca78eb"
+         "health_check_id": "<generated-health-check-id-1>"
        },
        {
-         "cluster_id": "your-cluster-id-2",
+         "cluster_id": "<your-cluster-id-2>",
          "region": "us-west-2",
-         "hostname": "your-hostname-2.dsql.us-west-2.on.aws",
+         "hostname": "<your-cluster-id-2>.dsql.us-west-2.on.aws",
          "port": 5432,
          "priority": 2,
-         "health_check_id": "37d3a545-2917-4e8f-9e44-f7d5e9b966a7"
+         "health_check_id": "<generated-health-check-id-2>"
        }
      ],
      "connection_settings": {
@@ -227,9 +227,9 @@ The library provides detailed logging about endpoint health, latency, and connec
 
 ```
 Endpoint latency comparison:
-  1. iaabtumcvmzcqntetotnvc2s6q.dsql.us-east-1.on.aws - Latency: 0.055231s, Priority: 1, Region: us-east-1
-  2. syabtumcvm3imisxx354rldj5i.dsql.us-east-2.on.aws - Latency: 0.058111s, Priority: 2, Region: us-east-2
-Selected best endpoint: iaabtumcvmzcqntetotnvc2s6q.dsql.us-east-1.on.aws (latency: 0.055231s, priority: 1)
+  1. <your-cluster-id-1>.dsql.us-east-1.on.aws - Latency: 0.055231s, Priority: 1, Region: us-east-1
+  2. <your-cluster-id-2>.dsql.us-east-2.on.aws - Latency: 0.058111s, Priority: 2, Region: us-east-2
+Selected best endpoint: <your-cluster-id-1>.dsql.us-east-1.on.aws (latency: 0.055231s, priority: 1)
 ```
 
 You can adjust the logging level in your application:
