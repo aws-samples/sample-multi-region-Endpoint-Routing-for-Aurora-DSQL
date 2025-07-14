@@ -1,16 +1,16 @@
 {
   "endpoints": [
     {
-      "cluster_id": "<your-cluster-id>",
-      "region": "us-east-1",
-      "hostname": "<your-cluster-endpoint>",
+      "cluster_id": "<your-cluster-id-region-1>",
+      "region": "-region-1",
+      "hostname": "<your-cluster-endpoint-region-1>",
       "port": 5432,
       "priority": 1
     },
     {
-      "cluster_id": "<your-cluster-id>",
+      "cluster_id": "<your-cluster-id-region-2>",
       "region": "us-east-2",
-      "hostname": "<your-cluster-endpoint>",
+      "hostname": "<your-cluster-endpoint-region-2>",
       "port": 5432,
       "priority": 2
     }
