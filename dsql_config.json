@@ -1,16 +1,16 @@
 {
   "endpoints": [
     {
-      "cluster_id": "iaabtumcvmzcqntetotnvc2s6q",
+      "cluster_id": "<your-cluster-id>",
       "region": "us-east-1",
-      "hostname": "iaabtumcvmzcqntetotnvc2s6q.dsql.us-east-1.on.aws",
+      "hostname": "<your-cluster-endpoint>",
       "port": 5432,
       "priority": 1
     },
     {
-      "cluster_id": "syabtumcvm3imisxx354rldj5i",
+      "cluster_id": "<your-cluster-id>",
       "region": "us-east-2",
-      "hostname": "syabtumcvm3imisxx354rldj5i.dsql.us-east-2.on.aws",
+      "hostname": "<your-cluster-endpoint>",
       "port": 5432,
       "priority": 2
     }
