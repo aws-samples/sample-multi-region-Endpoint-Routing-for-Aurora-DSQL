@@ -2,7 +2,7 @@
   "endpoints": [
     {
       "cluster_id": "<Your-culster-id>",
-      "region": "us-east-1",
+      "region": "<cluster-region-1>",
       "hostname": "<Your-Cluster-endpoint>",
       "port": 5432,
       "priority": 1,
@@ -10,7 +10,7 @@
     },
     {
       "cluster_id": "<Your-culster-id>",
-      "region": "us-east-2",
+      "region": "<cluster-region-2>",
       "hostname": "<Your-Cluster-endpoint>",
       "port": 5432,
       "priority": 2,
