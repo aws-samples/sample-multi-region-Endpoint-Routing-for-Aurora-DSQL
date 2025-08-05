@@ -112,7 +112,6 @@ The repository includes a sample configuration file `dsql_config_with_healthchec
       "region": "us-east-1",
       "hostname": "<your-cluster-id-1>.dsql.us-east-1.on.aws",
       "port": 5432,
-      "priority": 1,
       "health_check_id": "<health-check-id-1>"
     },
     {
@@ -120,7 +119,6 @@ The repository includes a sample configuration file `dsql_config_with_healthchec
       "region": "us-east-2",
       "hostname": "<your-cluster-id-2>.dsql.us-east-2.on.aws",
       "port": 5432,
-      "priority": 2,
       "health_check_id": "<health-check-id-2>"
     }
   ],
@@ -159,7 +157,6 @@ The library provides an enhanced approach that uses AWS Route 53 health checks f
          "region": "us-east-1",
          "hostname": "<your-cluster-id-1>.dsql.us-east-1.on.aws",
          "port": 5432,
-         "priority": 1,
          "health_check_id": "<generated-health-check-id-1>"
        },
        {
@@ -167,7 +164,6 @@ The library provides an enhanced approach that uses AWS Route 53 health checks f
          "region": "us-west-2",
          "hostname": "<your-cluster-id-2>.dsql.us-west-2.on.aws",
          "port": 5432,
-         "priority": 2,
          "health_check_id": "<generated-health-check-id-2>"
        }
      ],
@@ -228,7 +224,7 @@ The library provides detailed logging about endpoint health, latency, and connec
 Endpoint latency comparison:
   1. <your-cluster-id-1>.dsql.us-east-1.on.aws - Latency: 0.055231s, Priority: 1, Region: us-east-1
   2. <your-cluster-id-2>.dsql.us-east-2.on.aws - Latency: 0.058111s, Priority: 2, Region: us-east-2
-Selected best endpoint: <your-cluster-id-1>.dsql.us-east-1.on.aws (latency: 0.055231s, priority: 1)
+Selected best endpoint: <your-cluster-id-1>.dsql.us-east-1.on.aws (latency: 0.055231s)
 ```
 
 You can adjust the logging level in your application:
