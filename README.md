@@ -77,15 +77,14 @@ endpoints = [
         "cluster_id": "<your-cluster-id-1>",
         "region": "us-east-1",
         "hostname": "<your-cluster-id-1>.dsql.us-east-1.on.aws",
-        "port": 5432,
-        "priority": 1  # Lower priority number means higher preference
+        "port": 5432
+       
     },
     {
         "cluster_id": "<your-cluster-id-2>",
         "region": "us-west-2",
         "hostname": "<your-cluster-id-2>.dsql.us-west-2.on.aws",
-        "port": 5432,
-        "priority": 2
+        "port": 5432
     }
 ]
 
