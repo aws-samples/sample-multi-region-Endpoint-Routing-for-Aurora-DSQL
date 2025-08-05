@@ -92,8 +92,6 @@ endpoints = [
 manager = DSQLConnectionManager(endpoints=endpoints)
 ```
 
-The `priority` field is optional. When provided, it can influence endpoint selection if latencies are similar. Lower priority numbers indicate higher preference.
-
 ### Configuration File
 
 You can also load endpoints from a JSON configuration file:
