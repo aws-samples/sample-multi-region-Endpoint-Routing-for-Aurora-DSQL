@@ -1,0 +1,16 @@
+# Local deploy secret for the pet store origin-verify header. Never commit.
+petstore-api/.origin-secret
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Build / log artifacts
+build.log
+
+# k6 load-test HTML report
+loadtest/report.html
+
+# macOS metadata
+.DS_Store

@@ -1,0 +1,3 @@
+# DSQL support requires boto3 >= 1.37.24 (matches the parent repo).
+boto3>=1.37.24
+psycopg2-binary>=2.9.0
