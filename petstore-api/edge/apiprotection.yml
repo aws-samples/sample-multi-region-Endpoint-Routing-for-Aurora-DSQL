@@ -1,0 +1,106 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CloudFront distribution that fronts the DSQL-backed pet store API Gateway.
+  CloudFront injects a secret custom origin header (x-origin-verify) that the
+  API Gateway REQUEST authorizer verifies, so the API is reachable only through
+  this distribution. The sample API has no WAF and no end-user authentication.
+  You will be billed for the AWS resources created by this stack.
+
+Parameters:
+  APIGWEndpoint:
+    Type: String
+    Description: >-
+      API Gateway origin domain, in the form
+      <apiId>.execute-api.<region>.amazonaws.com. Use the backend stack's
+      ApiGatewayEndpoint output.
+
+  OriginPath:
+    Type: String
+    Default: /prod
+    Description: Stage path prepended to origin requests (matches the API stage name).
+
+  OriginVerifySecret:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: >-
+      Shared secret sent in the x-origin-verify header to the origin. Must match
+      the value given to the backend stack. Generate with e.g. openssl rand -hex
+      32 and never commit it.
+
+  OriginVerifyHeaderName:
+    Type: String
+    Default: x-origin-verify
+    Description: Name of the custom origin header CloudFront injects.
+
+Outputs:
+  CFDistribution:
+    Description: CloudFront domain URL (the only supported entry point to the API).
+    Value: !Sub 'https://${CFDistribution.DomainName}'
+  S3BucketAccessLogs:
+    Description: S3 bucket for CloudFront access logs.
+    Value: !Ref S3BucketAccessLogs
+
+Resources:
+  S3BucketAccessLogs:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain # you will need to delete the bucket manually
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'AES256'
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      # Keep the log bucket private. CloudFront log delivery uses the bucket ACL
+      # granted via OwnershipControls above, not public access.
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  CFDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Logging:
+          IncludeCookies: 'false'
+          Bucket: !Sub '${S3BucketAccessLogs}.s3.amazonaws.com'
+          Prefix: cloudfront-logs
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          TargetOriginId: apiGwOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          # CachingDisabled + AllViewerExceptHostHeader managed policies so the
+          # API is treated as dynamic and headers/body reach the origin.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        Enabled: true
+        HttpVersion: http2
+        Origins:
+          - Id: apiGwOrigin
+            DomainName: !Ref APIGWEndpoint
+            OriginPath: !Ref OriginPath
+            # The secret header that makes this distribution the only viable
+            # caller. The API Gateway authorizer verifies it on every request.
+            OriginCustomHeaders:
+              - HeaderName: !Ref OriginVerifyHeaderName
+                HeaderValue: !Ref OriginVerifySecret
+            CustomOriginConfig:
+              HTTPPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2

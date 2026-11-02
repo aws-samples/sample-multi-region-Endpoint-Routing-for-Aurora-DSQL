@@ -1,0 +1,89 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Amazon Aurora DSQL multi-Region cluster member. Deploy this same template to
+  each of the two linked (peer) Regions. The witness Region must differ from the
+  Region the stack is deployed to. Peering is completed in a second pass once
+  both cluster ARNs are known (see the Clusters parameter and the deploy script).
+
+Parameters:
+  WitnessRegion:
+    Type: String
+    Description: >-
+      The witness Region for the multi-Region cluster. Must be different from the
+      Region this stack is deployed to, and the same value in both peer stacks.
+    AllowedPattern: '^[a-z]{2}-[a-z]+-\d$'
+    ConstraintDescription: Must be a valid AWS Region code, e.g. us-west-2.
+
+  PeerClusterArns:
+    Type: CommaDelimitedList
+    Description: >-
+      Phase 2 only. Comma-separated list of BOTH peer cluster ARNs (this Region's
+      cluster and the other Region's cluster). Leave empty on the first (create)
+      pass; populate it on the second (peer) pass to establish the peer
+      relationship. Example:
+      arn:aws:dsql:us-east-1:111122223333:cluster/aaaa,arn:aws:dsql:us-east-2:111122223333:cluster/bbbb
+    Default: ''
+
+  DeletionProtection:
+    Type: String
+    Description: Whether deletion protection is enabled on the cluster.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  ProjectTag:
+    Type: String
+    Description: Value for the Project tag applied to the cluster.
+    Default: dsql-multi-region-routing-demo
+
+Conditions:
+  # True only once PeerClusterArns has been supplied (phase 2 / peering pass).
+  HasPeerArns: !Not [!Equals [!Join ['', !Ref PeerClusterArns], '']]
+  DeletionProtectionOn: !Equals [!Ref DeletionProtection, 'true']
+
+Resources:
+  MRCluster:
+    Type: AWS::DSQL::Cluster
+    Properties:
+      DeletionProtectionEnabled: !If [DeletionProtectionOn, true, false]
+      MultiRegionProperties:
+        WitnessRegion: !Ref WitnessRegion
+        # Clusters is only set on the peering pass. On the first pass it is
+        # omitted so each Region can create its cluster independently.
+        Clusters: !If
+          - HasPeerArns
+          - !Ref PeerClusterArns
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-${AWS::Region}'
+        - Key: Project
+          Value: !Ref ProjectTag
+
+Outputs:
+  ClusterIdentifier:
+    Description: The unique identifier assigned to the cluster (used as cluster_id in dsql_config.json).
+    Value: !GetAtt MRCluster.Identifier
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterIdentifier'
+
+  ClusterArn:
+    Description: The ARN of the cluster. Supply this (and the peer's ARN) as PeerClusterArns on the peering pass.
+    Value: !GetAtt MRCluster.ResourceArn
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterArn'
+
+  ClusterEndpoint:
+    Description: The connection endpoint hostname for the cluster (used as hostname in dsql_config.json).
+    Value: !GetAtt MRCluster.Endpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterEndpoint'
+
+  ClusterStatus:
+    Description: Current cluster status. ACTIVE once multi-Region setup is complete.
+    Value: !GetAtt MRCluster.Status
+
+  VpcEndpointServiceName:
+    Description: VPC Endpoint Service name, for connecting from inside a VPC.
+    Value: !GetAtt MRCluster.VpcEndpointServiceName

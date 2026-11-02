@@ -1,0 +1,402 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  DSQL-backed pet store API. A container-image Lambda runs the pet store CRUD
+  handlers (zip package + psycopg2 layer) and talks to the Aurora DSQL
+  multi-Region cluster via the parent repo's DSQLConnectionManager. API Gateway
+  (REST) exposes the handlers with NO end-user authorizer -- public sample API
+  -- but a REQUEST Lambda
+  authorizer makes it reachable only when the request carries the matching
+  CloudFront secret header. Deploy the edge/apiprotection.yml stack to front it.
+
+Parameters:
+  CodeS3Bucket:
+    Type: String
+    Description: S3 bucket holding the packaged function zip and the psycopg2 layer zip.
+
+  CodeS3Key:
+    Type: String
+    Description: S3 key of the pet store function zip (handler + db + connection manager + dsql_config.json).
+
+  Psycopg2LayerS3Key:
+    Type: String
+    Description: S3 key of the psycopg2 Lambda layer zip (built for the Lambda runtime).
+
+  OriginVerifySecret:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: >-
+      Shared secret CloudFront sends in the x-origin-verify header. Generate a
+      random value at deploy time (e.g. openssl rand -hex 32) and pass the same
+      value to the edge stack. Never commit this value.
+
+  OriginVerifyHeaderName:
+    Type: String
+    Default: x-origin-verify
+    Description: Name of the header CloudFront injects and the authorizer verifies.
+
+  DsqlClusterArnPattern:
+    Type: String
+    Default: '*'
+    Description: >-
+      Resource scope for dsql:DbConnectAdmin, e.g.
+      arn:aws:dsql:*:<account>:cluster/*. Narrow this to your cluster ARNs for
+      least privilege. Defaults to * for first-run convenience.
+
+  InterruptParameterName:
+    Type: String
+    Default: /petstore/interrupt-region
+    Description: >-
+      SSM parameter name holding the failover interrupt flag (none |
+      us-east-1 | us-east-2). The interrupt CLI sets it; the Lambda reads it to
+      drop a Region from endpoint selection for the failover demo.
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Pet store CRUD Lambda (container image, talks to DSQL)
+  # ---------------------------------------------------------------------------
+  PetStoreFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PetStoreLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:*'
+              # DSQL IAM admin-token auth. Scope DsqlClusterArnPattern to your
+              # cluster ARNs for least privilege.
+              - Effect: Allow
+                Action:
+                  - dsql:DbConnectAdmin
+                Resource: !Ref DsqlClusterArnPattern
+              # Read the failover interrupt flag (demo: mark a Region unhealthy).
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${InterruptParameterName}'
+
+  Psycopg2Layer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub '${AWS::StackName}-psycopg2'
+      Description: psycopg2 built for the Lambda Python runtime.
+      CompatibleRuntimes:
+        - python3.12
+      Content:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref Psycopg2LayerS3Key
+
+  PetStoreFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: DSQL-backed pet store CRUD handlers.
+      Runtime: python3.12
+      Handler: handler.handler
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
+      Layers:
+        - !Ref Psycopg2Layer
+      Role: !GetAtt PetStoreFunctionRole.Arn
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          # Defense-in-depth: the handler re-verifies the same header.
+          CF_SECRET_HEADER_NAME: !Ref OriginVerifyHeaderName
+          CF_SECRET_HEADER_VALUE: !Ref OriginVerifySecret
+          DSQL_DATABASE: postgres
+          DSQL_USER: admin
+          DSQL_CONFIG_FILE: dsql_config.json
+          INTERRUPT_PARAM_NAME: !Ref InterruptParameterName
+
+  PetStoreLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${PetStoreFunction}'
+      RetentionInDays: 14
+
+  # Failover interrupt flag. "none" = normal; set to a Region (e.g. us-east-1)
+  # to make the Lambda drop that Region from endpoint selection, forcing
+  # failover to the other Region. The interrupt CLI updates this value.
+  InterruptParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref InterruptParameterName
+      Type: String
+      Value: none
+      Description: Pet store failover interrupt flag (none | us-east-1 | us-east-2).
+
+  # ---------------------------------------------------------------------------
+  # REQUEST authorizer: verifies the CloudFront secret header. This is the
+  # primary "CloudFront only" gate. API Gateway resource policies cannot match
+  # arbitrary request headers, so a REQUEST authorizer is the supported way to
+  # verify x-origin-verify. It compares in constant time and fails closed.
+  # ---------------------------------------------------------------------------
+  OriginVerifyAuthorizerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AuthorizerLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:*'
+
+  OriginVerifyAuthorizerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Verifies the CloudFront x-origin-verify secret header (constant-time, fail closed).
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Role: !GetAtt OriginVerifyAuthorizerRole.Arn
+      MemorySize: 128
+      Timeout: 5
+      Environment:
+        Variables:
+          EXPECTED_SECRET: !Ref OriginVerifySecret
+          HEADER_NAME: !Ref OriginVerifyHeaderName
+      Code:
+        ZipFile: |
+          'use strict';
+          const crypto = require('crypto');
+
+          // Constant-time compare that also resists length leakage.
+          function safeEqual(a, b) {
+            const ab = Buffer.from(String(a));
+            const bb = Buffer.from(String(b));
+            if (ab.length !== bb.length) {
+              // Compare against self to keep timing uniform, then fail.
+              crypto.timingSafeEqual(ab, ab);
+              return false;
+            }
+            return crypto.timingSafeEqual(ab, bb);
+          }
+
+          exports.handler = async (event) => {
+            const expected = process.env.EXPECTED_SECRET || '';
+            const headerName = (process.env.HEADER_NAME || 'x-origin-verify').toLowerCase();
+
+            // Fail closed if the verifier is not configured.
+            if (!expected) {
+              return deny(event);
+            }
+
+            // Normalize header keys to lower case.
+            const headers = {};
+            for (const [k, v] of Object.entries(event.headers || {})) {
+              headers[k.toLowerCase()] = v;
+            }
+            const presented = headers[headerName] || '';
+
+            return safeEqual(presented, expected) ? allow(event) : deny(event);
+          };
+
+          function allow(event) {
+            return policy('Allow', event);
+          }
+          function deny(event) {
+            return policy('Deny', event);
+          }
+          function policy(effect, event) {
+            return {
+              principalId: 'cloudfront-origin',
+              policyDocument: {
+                Version: '2012-10-17',
+                Statement: [{
+                  Action: 'execute-api:Invoke',
+                  Effect: effect,
+                  Resource: event.methodArn,
+                }],
+              },
+            };
+          }
+
+  OriginVerifyAuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${OriginVerifyAuthorizerFunction}'
+      RetentionInDays: 14
+
+  # ---------------------------------------------------------------------------
+  # REST API
+  # ---------------------------------------------------------------------------
+  PetStoreApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub '${AWS::StackName}-petstore'
+      Description: Pet store REST API, reachable only through CloudFront.
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  OriginVerifyAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: origin-verify
+      RestApiId: !Ref PetStoreApi
+      Type: REQUEST
+      # Identity source is the secret header; API Gateway will 401 outright if
+      # the header is entirely absent, and the function denies on mismatch.
+      IdentitySource: !Sub 'method.request.header.${OriginVerifyHeaderName}'
+      AuthorizerResultTtlInSeconds: 0
+      AuthorizerUri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OriginVerifyAuthorizerFunction.Arn}/invocations'
+
+  OriginVerifyAuthorizerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OriginVerifyAuthorizerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${PetStoreApi}/authorizers/${OriginVerifyAuthorizer}'
+
+  PetsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      ParentId: !GetAtt PetStoreApi.RootResourceId
+      PathPart: pets
+
+  PetIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      ParentId: !Ref PetsResource
+      PathPart: '{petId}'
+
+  PetsPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      ResourceId: !Ref PetsResource
+      HttpMethod: POST
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref OriginVerifyAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PetStoreFunction.Arn}/invocations'
+
+  PetsGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      ResourceId: !Ref PetsResource
+      HttpMethod: GET
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref OriginVerifyAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PetStoreFunction.Arn}/invocations'
+
+  PetIdGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      ResourceId: !Ref PetIdResource
+      HttpMethod: GET
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref OriginVerifyAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PetStoreFunction.Arn}/invocations'
+
+  PetIdPutMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      ResourceId: !Ref PetIdResource
+      HttpMethod: PUT
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref OriginVerifyAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PetStoreFunction.Arn}/invocations'
+
+  PetIdDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      ResourceId: !Ref PetIdResource
+      HttpMethod: DELETE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref OriginVerifyAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PetStoreFunction.Arn}/invocations'
+
+  # Logical ID bumped (…V2) so adding PUT/DELETE forces a NEW deployment that
+  # includes them -- an unchanged Deployment logical ID would not redeploy.
+  PetStoreDeploymentV2:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - PetsPostMethod
+      - PetsGetMethod
+      - PetIdGetMethod
+      - PetIdPutMethod
+      - PetIdDeleteMethod
+    Properties:
+      RestApiId: !Ref PetStoreApi
+
+  PetStoreStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref PetStoreApi
+      DeploymentId: !Ref PetStoreDeploymentV2
+      StageName: prod
+
+  PetStoreInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PetStoreFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${PetStoreApi}/*/*/*'
+
+Outputs:
+  ApiGatewayEndpoint:
+    Description: >-
+      API Gateway origin domain for the edge stack's APIGWEndpoint parameter,
+      in the form <apiId>.execute-api.<region>.amazonaws.com
+    Value: !Sub '${PetStoreApi}.execute-api.${AWS::Region}.amazonaws.com'
+
+  ApiInvokeUrlDirect:
+    Description: >-
+      Direct invoke URL. Calling this WITHOUT the secret header returns 401/403
+      by design -- the API is meant to be reached only through CloudFront.
+    Value: !Sub 'https://${PetStoreApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+
+  StageName:
+    Description: Deployed stage name.
+    Value: prod
